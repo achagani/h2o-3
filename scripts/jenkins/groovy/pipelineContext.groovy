@@ -3,6 +3,10 @@ def call(final String h2o3Root, final String mode, final scmEnv, final boolean i
 }
 
 def call(final String h2o3Root, final String mode, final scmEnv, boolean ignoreChanges, final List<String> gradleOpts) {
+    return call(h2o3Root, mode, scmEnv, ignoreChanges, gradleOpts, 'docker')
+}
+
+def call(final String h2o3Root, final String mode, final scmEnv, boolean ignoreChanges, final List<String> gradleOpts, final String isolationBackend) {
     final String BUILD_SUMMARY_SCRIPT_NAME = 'buildSummary.groovy'
     final String BUILD_CONFIG_SCRIPT_NAME = 'buildConfig.groovy'
     final String PIPELINE_UTILS_SCRIPT_NAME = 'pipelineUtils.groovy'
@@ -30,6 +34,23 @@ def call(final String h2o3Root, final String mode, final scmEnv, boolean ignoreC
             ignoreChanges = true
         }
     }
+    
+    def buildIsolation
+    def stageIsolation
+    
+    switch (buildIsolation) {
+        case 'docker':
+            buildIsolation = 'docker' // run build in docker container
+            stageIsolation = 'docker' // run stage in docker container
+            break
+        case 'k8s':
+            buildIsolation = 'none'   // checkout and init is executed in pod already, so no need for additional isolation here
+            stageIsolation = 'pod'    // run stage in pod container
+            break
+        default:
+            error "Isolation backend ${isolationBackend} not supported"
+    }
+    
     return new PipelineContext(
             buildConfigFactory(this, mode, env.COMMIT_MESSAGE, changes, ignoreChanges,
                     pipelineUtils.readSupportedHadoopDistributions(this, buildinfoPath), gradleOpts,
@@ -39,7 +60,9 @@ def call(final String h2o3Root, final String mode, final scmEnv, boolean ignoreC
             buildSummaryFactory(true),
             pipelineUtils,
             emailerFactory(),
-            healthCheckerFactory()
+            healthCheckerFactory(),
+            buildIsolation,
+            stageIsolation
     )
 }
 
@@ -58,21 +81,25 @@ private List<String> getChanges(final String h2o3Root) {
     return result
 }
 
-class PipelineContext{
+class PipelineContext {
 
     private final buildConfig
     private final buildSummary
     private final pipelineUtils
     private final emailer
     private final healthChecker
+    private final buildIsolation
+    private final stageIsolation
     private prepareBenchmarkDirStruct
 
-    private PipelineContext(final buildConfig, final buildSummary, final pipelineUtils, final emailer, final healthChecker) {
+    private PipelineContext(final buildConfig, final buildSummary, final pipelineUtils, final emailer, final healthChecker, final buildIsolation, final stageIsolation) {
         this.buildConfig = buildConfig
         this.buildSummary = buildSummary
         this.pipelineUtils = pipelineUtils
         this.emailer = emailer
         this.healthChecker = healthChecker
+        this.buildIsolation = buildIsolation
+        this.stageIsolation = stageIsolation
     }
 
     def getBuildConfig() {
@@ -93,6 +120,14 @@ class PipelineContext{
 
     def getHealthChecker() {
         return healthChecker
+    }
+    
+    def getBuildIsolation() {
+        return buildIsolation
+    }
+    
+    def getStageIsolation() {
+        return stageIsolation
     }
 
     def getPrepareBenchmarkDirStruct(final context, final mlBenchmarkRoot) {
