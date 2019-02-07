@@ -625,32 +625,49 @@ private void invokeStage(final pipelineContext, final body) {
           pipelineContext.getBuildSummary().setStageDetails(this, config.stageName, 'Skipped', 'N/A')
           pipelineContext.getBuildSummary().markStageSuccessful(this, config.stageName)
         } else {
-          boolean healthCheckPassed = false
-          int attempt = 0
-          String nodeLabel = config.nodeLabel
+          stageImplClosure = {
+            def withIsolation = load('h2o-3/scripts/jenkins/groovy/withIsolation.groovy')
+            def isolationArgs = [
+                    customEnv: pipelineContext.getBuildConfig().getBuildEnv() + ["PYTHON_VERSION=${stageConfig.pythonVersion}", "R_VERSION=${stageConfig.rVersion}", "JAVA_VERSION=${stageConfig.javaVersion}"],
+                    image: stageConfig.image,
+                    registry: pipelineContext.getBuildConfig().DOCKER_REGISTRY,
+                    buildConfig: pipelineContext.getBuildConfig(),
+                    timeoutValue: stageConfig.timeoutValue,
+                    customDockerArgs: stageConfig.customDockerArgs.join(' '),
+                    mem: stageConfig.mem,
+                    cpu: stageConfig.cpu
+            ]
+            withIsolation(pipelineContext.getStageIsolation(), isolationArgs) {
+              echo "###### Unstash scripts. ######"
+              pipelineContext.getUtils().unstashScripts(this)
+              pipelineContext.getBuildSummary().setStageDetails(this, config.stageName, env.NODE_NAME, env.WORKSPACE)
+              sh "rm -rf ${config.stageDir}"
+              def script = load(config.executionScript)
+              script(pipelineContext, config)
+              pipelineContext.getBuildSummary().markStageSuccessful(this, config.stageName)
+            }
+          }
           try {
-            while (!healthCheckPassed) {
-              attempt += 1
-              if (attempt > HEALTH_CHECK_RETRIES) {
-                error "Too many attempts to pass initial health check"
-              }
-              nodeLabel = pipelineContext.getHealthChecker().getHealthyNodesLabel(config.nodeLabel)
-              echo "######### NodeLabel: ${nodeLabel} #########"
-              node(nodeLabel) {
-                echo "###### Unstash scripts. ######"
-                pipelineContext.getUtils().unstashScripts(this)
-
-                healthCheckPassed = pipelineContext.getHealthChecker().checkHealth(this, env.NODE_NAME, config.image, pipelineContext.getBuildConfig().DOCKER_REGISTRY, pipelineContext.getBuildConfig())
-                if (healthCheckPassed) {
-                  pipelineContext.getBuildSummary().setStageDetails(this, config.stageName, env.NODE_NAME, env.WORKSPACE)
-
-                  sh "rm -rf ${config.stageDir}"
-
-                  def script = load(config.executionScript)
-                  script(pipelineContext, config)
-                  pipelineContext.getBuildSummary().markStageSuccessful(this, config.stageName)
+            if (pipelineContext.isHealthCheckEnabled()) {
+              boolean healthCheckPassed = false
+              int attempt = 0
+              String nodeLabel = config.nodeLabel
+              while (!healthCheckPassed) {
+                attempt += 1
+                if (attempt > HEALTH_CHECK_RETRIES) {
+                  error "Too many attempts to pass initial health check"
+                }
+                nodeLabel = pipelineContext.getHealthChecker().getHealthyNodesLabel(config.nodeLabel)
+                echo "######### NodeLabel: ${nodeLabel} #########"
+                node(nodeLabel) {
+                  healthCheckPassed = pipelineContext.getHealthChecker().checkHealth(this, env.NODE_NAME, config.image, pipelineContext.getBuildConfig().DOCKER_REGISTRY, pipelineContext.getBuildConfig())
+                  if (healthCheckPassed) {
+                    stageImplClosure()
+                  }
                 }
               }
+            } else {
+              stageImplClosure()
             }
           } catch (Exception e) {
             pipelineContext.getBuildSummary().markStageFailed(this, config.stageName)

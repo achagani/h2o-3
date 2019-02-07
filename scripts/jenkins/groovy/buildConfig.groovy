@@ -341,7 +341,7 @@ class BuildConfig {
         case 'c1':
           return C1
         default:
-          throw new IllegalArgumentException(String.format("Master %s is unknown", name))
+          return C1 // assume default jenkins master
       }
     }
 

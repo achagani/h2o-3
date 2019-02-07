@@ -38,7 +38,7 @@ def call(final String h2o3Root, final String mode, final scmEnv, boolean ignoreC
     def buildIsolation
     def stageIsolation
     
-    switch (buildIsolation) {
+    switch (isolationBackend) {
         case 'docker':
             buildIsolation = 'docker' // run build in docker container
             stageIsolation = 'docker' // run stage in docker container
@@ -62,7 +62,8 @@ def call(final String h2o3Root, final String mode, final scmEnv, boolean ignoreC
             emailerFactory(),
             healthCheckerFactory(),
             buildIsolation,
-            stageIsolation
+            stageIsolation,
+            isolationBackend == 'docker' // health check enabled
     )
 }
 
@@ -90,9 +91,10 @@ class PipelineContext {
     private final healthChecker
     private final buildIsolation
     private final stageIsolation
+    private final healthCheckEnabled
     private prepareBenchmarkDirStruct
 
-    private PipelineContext(final buildConfig, final buildSummary, final pipelineUtils, final emailer, final healthChecker, final buildIsolation, final stageIsolation) {
+    private PipelineContext(final buildConfig, final buildSummary, final pipelineUtils, final emailer, final healthChecker, final buildIsolation, final stageIsolation, final healthCheckEnabled) {
         this.buildConfig = buildConfig
         this.buildSummary = buildSummary
         this.pipelineUtils = pipelineUtils
@@ -100,6 +102,7 @@ class PipelineContext {
         this.healthChecker = healthChecker
         this.buildIsolation = buildIsolation
         this.stageIsolation = stageIsolation
+        this.healthCheckEnabled = healthCheckEnabled
     }
 
     def getBuildConfig() {
@@ -128,6 +131,10 @@ class PipelineContext {
     
     def getStageIsolation() {
         return stageIsolation
+    }
+    
+    def isHealthCheckEnabled() {
+        return healthCheckEnabled
     }
 
     def getPrepareBenchmarkDirStruct(final context, final mlBenchmarkRoot) {
