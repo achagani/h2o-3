@@ -625,19 +625,18 @@ private void invokeStage(final pipelineContext, final body) {
           pipelineContext.getBuildSummary().setStageDetails(this, config.stageName, 'Skipped', 'N/A')
           pipelineContext.getBuildSummary().markStageSuccessful(this, config.stageName)
         } else {
-          stageImplClosure = {
-            def withIsolation = load('h2o-3/scripts/jenkins/groovy/withIsolation.groovy')
+          def stageImplClosure = {
             def isolationArgs = [
-                    customEnv: pipelineContext.getBuildConfig().getBuildEnv() + ["PYTHON_VERSION=${stageConfig.pythonVersion}", "R_VERSION=${stageConfig.rVersion}", "JAVA_VERSION=${stageConfig.javaVersion}"],
-                    image: stageConfig.image,
+                    customEnv: pipelineContext.getBuildConfig().getBuildEnv() + ["PYTHON_VERSION=${config.pythonVersion}", "R_VERSION=${config.rVersion}", "JAVA_VERSION=${config.javaVersion}"],
+                    image: config.image,
                     registry: pipelineContext.getBuildConfig().DOCKER_REGISTRY,
                     buildConfig: pipelineContext.getBuildConfig(),
-                    timeoutValue: stageConfig.timeoutValue,
-                    customDockerArgs: stageConfig.customDockerArgs.join(' '),
-                    mem: stageConfig.mem,
-                    cpu: stageConfig.cpu
+                    timeoutValue: config.timeoutValue,
+                    customDockerArgs: config.customDockerArgs.join(' '),
+                    mem: config.mem,
+                    cpu: config.cpu
             ]
-            withIsolation(pipelineContext.getStageIsolation(), isolationArgs) {
+            pipelineContext.getIsolationProvider().withIsolation(this, pipelineContext.getStageIsolation(), isolationArgs) {
               echo "###### Unstash scripts. ######"
               pipelineContext.getUtils().unstashScripts(this)
               pipelineContext.getBuildSummary().setStageDetails(this, config.stageName, env.NODE_NAME, env.WORKSPACE)
@@ -651,7 +650,7 @@ private void invokeStage(final pipelineContext, final body) {
             if (pipelineContext.isHealthCheckEnabled()) {
               boolean healthCheckPassed = false
               int attempt = 0
-              String nodeLabel = config.nodeLabel
+              String nodeLabel
               while (!healthCheckPassed) {
                 attempt += 1
                 if (attempt > HEALTH_CHECK_RETRIES) {

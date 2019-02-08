@@ -12,6 +12,8 @@ def call(final String h2o3Root, final String mode, final scmEnv, boolean ignoreC
     final String PIPELINE_UTILS_SCRIPT_NAME = 'pipelineUtils.groovy'
     final String EMAILER_SCRIPT_NAME = 'emailer.groovy'
     final String HEALTH_CHECKER_SCRIPT_NAME = 'healthChecker.groovy'
+    final String WITH_ISOLATION_SCRIPT_NAME = 'withIsolation.groovy'
+    final String INSIDE_DOCKER_SCRIPT_NAME = 'insideDocker.groovy'
 
     env.COMMIT_MESSAGE = sh(script: "cd ${h2o3Root} && git log -1 --pretty=%B", returnStdout: true).trim()
     env.BRANCH_NAME = scmEnv['GIT_BRANCH'].replaceAll('origin/', '')
@@ -23,6 +25,8 @@ def call(final String h2o3Root, final String mode, final scmEnv, boolean ignoreC
     def final pipelineUtilsFactory = load("${h2o3Root}/scripts/jenkins/groovy/${PIPELINE_UTILS_SCRIPT_NAME}")
     def final emailerFactory = load("${h2o3Root}/scripts/jenkins/groovy/${EMAILER_SCRIPT_NAME}")
     def final healthCheckerFactory = load("${h2o3Root}/scripts/jenkins/groovy/${HEALTH_CHECKER_SCRIPT_NAME}")
+    def final withIsolationFactory = load("${h2o3Root}/scripts/jenkins/groovy/${WITH_ISOLATION_SCRIPT_NAME}")
+    def final insideDocker = load("${h2o3Root}/scripts/jenkins/groovy/${INSIDE_DOCKER_SCRIPT_NAME}")
 
     def final buildinfoPath = "${h2o3Root}/h2o-dist/buildinfo.json"
 
@@ -60,7 +64,8 @@ def call(final String h2o3Root, final String mode, final scmEnv, boolean ignoreC
             buildSummaryFactory(true),
             pipelineUtils,
             emailerFactory(),
-            healthCheckerFactory(),
+            healthCheckerFactory(insideDocker),
+            withIsolationFactory(),
             buildIsolation,
             stageIsolation,
             isolationBackend == 'docker' // health check enabled
@@ -89,17 +94,21 @@ class PipelineContext {
     private final pipelineUtils
     private final emailer
     private final healthChecker
+    private final isolationProvider
     private final buildIsolation
     private final stageIsolation
     private final healthCheckEnabled
     private prepareBenchmarkDirStruct
 
-    private PipelineContext(final buildConfig, final buildSummary, final pipelineUtils, final emailer, final healthChecker, final buildIsolation, final stageIsolation, final healthCheckEnabled) {
+    private PipelineContext(final buildConfig, final buildSummary, final pipelineUtils, final emailer, 
+                            final healthChecker, final isolationProvider, final buildIsolation, final stageIsolation, 
+                            final healthCheckEnabled) {
         this.buildConfig = buildConfig
         this.buildSummary = buildSummary
         this.pipelineUtils = pipelineUtils
         this.emailer = emailer
         this.healthChecker = healthChecker
+        this.isolationProvider = isolationProvider
         this.buildIsolation = buildIsolation
         this.stageIsolation = stageIsolation
         this.healthCheckEnabled = healthCheckEnabled
@@ -123,6 +132,10 @@ class PipelineContext {
 
     def getHealthChecker() {
         return healthChecker
+    }
+    
+    def getIsolationProvider() {
+        return isolationProvider
     }
     
     def getBuildIsolation() {

@@ -5,7 +5,6 @@ def call(final pipelineContext) {
     final String JAVA_VERSION = '8'
 
     // Load required scripts
-    def withIsolation = load('h2o-3/scripts/jenkins/groovy/withIsolation.groovy')
     def makeTarget = load('h2o-3/scripts/jenkins/groovy/makeTarget.groovy')
 
     def stageName = 'Build H2O-3'
@@ -24,7 +23,7 @@ def call(final pipelineContext) {
                         buildConfig: pipelineContext.getBuildConfig(),
                         timeoutValue: timeoutMinutes
                 ]
-                withIsolation(pipelineContext.getBuildIsolation(), isolationArgs) {
+                pipelineContext.getIsolationProvider().withIsolation(this, pipelineContext.getBuildIsolation(), isolationArgs) {
                     try {
                         makeTarget(pipelineContext) {
                             target = 'build-h2o-3'
